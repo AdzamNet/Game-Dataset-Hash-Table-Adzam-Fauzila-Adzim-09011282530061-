@@ -1,0 +1,240 @@
+import csv
+import math
+import os
+import time
+
+class Game:
+    def __init__(self, title, console, genre, publisher, total_sales, release_date):
+        self.title = title
+        self.console = console
+        self.genre = genre
+        self.publisher = publisher
+        self.release_date = release_date
+        try:
+            val = float(total_sales) if total_sales and str(total_sales).strip() != '' else 0.0
+            self.total_sales = val if not math.isnan(val) else 0.0
+        except ValueError:
+            self.total_sales = 0.0
+
+    def __repr__(self):
+        judul = (self.title[:25] + '..') if len(self.title) > 25 else self.title
+        return f"| {judul:<27} | {self.console:<6} | {self.genre:<11} | {self.publisher:<18} | {self.release_date:<11} | {self.total_sales:>5}m |"
+
+class GameHashTable:
+    def __init__(self, size=5000):
+        self.size = size
+        self.table = [[] for _ in range(self.size)]
+        self.jumlah_data = 0
+
+    def _hash_function(self, key):
+        return sum(ord(c) for c in key.lower()) % self.size
+
+    def tambah_game(self, game, verbose=True):
+        if verbose:
+            print(f"[SYSTEM] Computing hash for key: '{game.title}'...")
+        
+        index = self._hash_function(game.title)
+        self.table[index].append(game)
+        self.jumlah_data += 1
+        
+        if verbose:
+            print(f"[INFO] Data stored at Index [{index}]. Total Records: {self.jumlah_data}")
+
+    def hapus_game(self, title):
+        print(f"\n[SYSTEM] Initiating delete sequence for: '{title}'")
+        index = self._hash_function(title)
+        bucket = self.table[index]
+        
+        print(f"[INFO] Accessing Hash Bucket [{index}]...")
+        for i in range(len(bucket)-1, -1, -1):
+            if bucket[i].title.lower() == title.lower():
+                del bucket[i]
+                self.jumlah_data -= 1
+                print(f"[SUCCESS] Data '{title}' removed from memory.")
+                return True
+        print(f"[WARNING] Data '{title}' not found in bucket.")
+        return False
+
+    def cari_game(self, keyword):
+        keyword = keyword.strip().lower()
+        print(f"\n[SYSTEM] SEARCH QUERY: '{keyword}'")
+        print("[INFO] Scanning Title, Genre, and Publisher...")
+        
+        start_time = time.time()
+        ditemukan = []
+        judul_tercatat = set()
+
+        for bucket in self.table:
+            for g in bucket:
+                if (keyword in g.title.lower() or 
+                    keyword in g.genre.lower() or 
+                    keyword in g.publisher.lower()):
+                    
+                    if g.title not in judul_tercatat:
+                        ditemukan.append(g)
+                        judul_tercatat.add(g.title)
+        
+        end_time = time.time()
+        duration = (end_time - start_time) * 1000
+        print(f"[INFO] Search completed in {duration:.2f} ms. Found {len(ditemukan)} matches.")
+        return ditemukan
+
+    def traverse(self):
+        for bucket in self.table:
+            for game in bucket:
+                yield game
+
+    def statistik_hash_table(self):
+        print("\n[SYSTEM] GENERATING HASH TABLE STATISTICS...")
+        bucket_terisi = 0
+        collision_max = 0
+        for bucket in self.table:
+            if bucket:
+                bucket_terisi += 1
+                collision_max = max(collision_max, len(bucket))
+
+        load_factor = self.jumlah_data / self.size
+        print("=" * 45)
+        print(f" Database Status  : ACTIVE")
+        print(f" Total Records    : {self.jumlah_data}")
+        print(f" Table Size       : {self.size} buckets")
+        print(f" Buckets Used     : {bucket_terisi}")
+        print(f" Load Factor      : {load_factor:.4f}")
+        print(f" Max Collision    : {collision_max} items in one bucket")
+        print("=" * 45)
+
+    def tampilkan_top_10(self):
+        print("\n[SYSTEM] Sorting data by Global Sales (Descending)...")
+        all_data = list(self.traverse())
+        all_data.sort(key=lambda x: x.total_sales, reverse=True)
+
+        print("\n=== TOP 10 BEST SELLING GAMES ===")
+        print("=" * 95)
+        print(f"| {'RANK':<4} | {'JUDUL':<27} | {'KONSO':<6} | {'GENRE':<11} | {'PUBLISHER':<18} | {'RILIS':<11} | {'SALES':>5} |")
+        print("=" * 95)
+
+        limit = min(10, len(all_data))
+        for i in range(limit):
+            g = all_data[i]
+            judul = (g.title[:25] + '..') if len(g.title) > 25 else g.title
+            print(f"| {i+1:<4} | {judul:<27} | {g.console:<6} | {g.genre:<11} | {g.publisher:<18} | {g.release_date:<11} | {g.total_sales:>5}m |")
+        
+        if limit == 0:
+            print("| [INFO] No data available to rank.                                                           |")
+            print("=" * 95)
+
+    def tampilkan_semua_data(self):
+        print(f"\n[INFO] Traversing all buckets. Total data: {self.jumlah_data}")
+        print("=" * 95)
+        print(f"| {'JUDUL':<27} | {'KONSO':<6} | {'GENRE':<11} | {'PUBLISHER':<18} | {'RILIS':<11} | {'SALES':>5} |")
+        print("=" * 95)
+
+        count = 0
+        for game in self.traverse():
+            print(game)
+            count += 1
+            if count % 50 == 0:
+                if input("\n[SYSTEM] Display paused. Enter to continue, 'q' to stop > ").lower() == 'q':
+                    break
+                print("-" * 95)
+
+def load_data_csv(hashtable, filename):
+    if not os.path.exists(filename):
+        print(f"[ERROR] Critical: File '{filename}' not found.")
+        return
+
+    print(f"[SYSTEM] Loading dataset from '{filename}'...")
+    print("[INFO] Parsing CSV format...")
+    
+    start_load = time.time()
+    try:
+        with open(filename, mode='r', encoding='utf-8-sig', errors='replace') as file:
+            reader = csv.DictReader(file)
+            reader.fieldnames = [n.strip() for n in reader.fieldnames]
+
+            count_loaded = 0
+            for row in reader:
+                if row.get('title'):
+                    game = Game(
+                        row.get('title'),
+                        row.get('console', 'N/A'),
+                        row.get('genre', 'N/A'),
+                        row.get('publisher', 'N/A'),
+                        row.get('total_sales(mil)', 0),
+                        row.get('release_date', 'N/A')
+                    )
+                    hashtable.tambah_game(game, verbose=False)
+                    count_loaded += 1
+            
+            end_load = time.time()
+            print(f"[SUCCESS] {hashtable.jumlah_data} records loaded in {(end_load - start_load):.2f} seconds.")
+
+    except Exception as e:
+        print(f"[ERROR] Failed to load data: {e}")
+
+def main():
+    library = GameHashTable()
+    load_data_csv(library, 'VideoGames_Sales.csv')
+
+    while True:
+        print("\n" + "="*50)
+        print("   GAME DATA MANAGEMENT SYSTEM (HASH TABLE)")
+        print("="*50)
+        print("1. Search Game (Multi-Attribute)")
+        print("2. Show Top 10 Best Sellers")
+        print("3. Show All Data")
+        print("4. Add New Record")
+        print("5. Delete Record")
+        print("6. System Statistics")
+        print("0. Exit System")
+        
+        pilih = input("\n[USER] Select Option (0-6): ")
+
+        if pilih == '1':
+            keyword = input("[USER] Enter keyword: ")
+            hasil = library.cari_game(keyword)
+            if hasil:
+                print("-" * 95)
+                for i, g in enumerate(hasil):
+                    if i < 20: print(g)
+                    else: 
+                        print(f"[INFO] ... and {len(hasil)-20} more results hidden.")
+                        break
+            else:
+                print("[INFO] No matching records found.")
+
+        elif pilih == '2':
+            library.tampilkan_top_10()
+
+        elif pilih == '3':
+            library.tampilkan_semua_data()
+
+        elif pilih == '4':
+            print("\n[SYSTEM] New Entry Mode")
+            try:
+                t = input("   Title     : ")
+                c = input("   Console   : ")
+                g = input("   Genre     : ")
+                p = input("   Publisher : ")
+                r = input("   Date      : ")
+                s = input("   Sales     : ")
+                library.tambah_game(Game(t, c, g, p, s, r), verbose=True)
+            except:
+                print("[ERROR] Invalid input format.")
+
+        elif pilih == '5':
+            judul = input("[USER] Enter EXACT Title to delete: ")
+            library.hapus_game(judul)
+
+        elif pilih == '6':
+            library.statistik_hash_table()
+
+        elif pilih == '0':
+            print("\n[SYSTEM] Shutting down...")
+            print("[SYSTEM] Goodbye.")
+            break
+        else:
+            print("[ERROR] Invalid selection.")
+
+if __name__ == "__main__":
+    main()
